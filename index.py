@@ -25,15 +25,19 @@ DEFAULT_HEADERS = {
     'sec-ch-ua-platform': '"Android"'
 }
 
-@app.after_request
-def after_request(response):
-    """Ajouter les headers CORS à toutes les réponses"""
+def add_cors_headers(response):
+    """Add CORS headers to response"""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, HEAD'
     response.headers['Access-Control-Allow-Headers'] = 'Origin, Range, Content-Type, Accept, Authorization'
     response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges'
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
+
+@app.after_request
+def after_request(response):
+    """Ajouter les headers CORS à toutes les réponses"""
+    return add_cors_headers(response)
 
 def modify_m3u8_content(content, base_url, proxy_base):
     """
@@ -77,7 +81,7 @@ def modify_m3u8_content(content, base_url, proxy_base):
 @app.route('/')
 def index():
     """Page d'accueil avec documentation"""
-    return """
+    response = Response("""
     <!DOCTYPE html>
     <html lang="fr">
     <head>
@@ -199,7 +203,8 @@ def index():
         </div>
     </body>
     </html>
-    """
+    """, mimetype='text/html')
+    return add_cors_headers(response)
 
 @app.route('/proxy')
 def proxy():
@@ -208,11 +213,12 @@ def proxy():
     target_url = request.args.get('url')
     
     if not target_url:
-        return Response(
+        response = Response(
             '{"error": "Paramètre URL manquant. Utilisation: /proxy?url=VOTRE_URL"}',
             status=400,
             mimetype='application/json'
         )
+        return add_cors_headers(response)
     
     # Décoder l'URL si elle est encodée
     target_url = unquote(target_url)
@@ -273,11 +279,12 @@ def proxy():
             logger.info(f"Modified M3U8 content with proxy URLs")
             
             # Retourner le contenu modifié
-            return Response(
+            flask_response = Response(
                 modified_content,
                 status=response.status_code,
                 mimetype='application/vnd.apple.mpegurl'
             )
+            return add_cors_headers(flask_response)
         else:
             # Pour les autres fichiers (segments TS, etc.), streamer directement
             excluded_headers = [
@@ -285,10 +292,6 @@ def proxy():
                 'content-length', 
                 'transfer-encoding', 
                 'connection',
-                'access-control-allow-origin',
-                'access-control-allow-methods',
-                'access-control-allow-headers',
-                'access-control-expose-headers'
             ]
             
             response_headers = [
@@ -296,30 +299,33 @@ def proxy():
                 if name.lower() not in excluded_headers
             ]
             
-            return Response(
+            flask_response = Response(
                 stream_with_context(response.iter_content(chunk_size=8192)),
                 status=response.status_code,
                 headers=response_headers
             )
+            return add_cors_headers(flask_response)
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error proxying request: {str(e)}")
-        return Response(
+        response = Response(
             f'{{"error": "Erreur lors de la requête: {str(e)}"}}',
             status=500,
             mimetype='application/json'
         )
+        return add_cors_headers(response)
 
 @app.route('/health')
 def health():
     """Endpoint de santé"""
-    return {"status": "ok", "service": "M3U8 CORS Proxy"}
+    response = Response('{"status": "ok", "service": "M3U8 CORS Proxy"}', mimetype='application/json')
+    return add_cors_headers(response)
 
 @app.route('/proxy', methods=['OPTIONS'])
 def proxy_options():
     """Répondre aux requêtes OPTIONS (preflight)"""
     response = Response()
-    return response
+    return add_cors_headers(response)
 
 if __name__ == '__main__':
     print("=" * 60)
