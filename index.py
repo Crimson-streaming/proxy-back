@@ -25,19 +25,16 @@ DEFAULT_HEADERS = {
     'sec-ch-ua-platform': '"Android"'
 }
 
-def add_cors_headers(response):
-    """Add CORS headers to response"""
+@app.after_request
+def after_request(response):
+    """Ajouter les headers CORS à toutes les réponses"""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, HEAD'
     response.headers['Access-Control-Allow-Headers'] = 'Origin, Range, Content-Type, Accept, Authorization'
     response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges'
-    response.headers['Access-Control-Max-Age'] = '3600'
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Vary'] = 'Origin'
     return response
-
-@app.after_request
-def after_request(response):
-    """Ajouter les headers CORS à toutes les réponses"""
-    return add_cors_headers(response)
 
 def modify_m3u8_content(content, base_url, proxy_base):
     """
@@ -81,7 +78,7 @@ def modify_m3u8_content(content, base_url, proxy_base):
 @app.route('/')
 def index():
     """Page d'accueil avec documentation"""
-    response = Response("""
+    return """
     <!DOCTYPE html>
     <html lang="fr">
     <head>
@@ -169,12 +166,12 @@ def index():
                 <h2>📖 Utilisation</h2>
                 <p>Format de l'URL proxy :</p>
                 <div class="code-box">
-                    http://127.0.0.1:5000/proxy?url=<span class="highlight">VOTRE_URL_M3U8</span>
+                    http://proxy-back.onrender.com/proxy?url=<span class="highlight">VOTRE_URL_M3U8</span>
                 </div>
                 
                 <p><strong>Exemple :</strong></p>
                 <div class="code-box">
-                    http://127.0.0.1:5000/proxy?url=https://share31960.sharecloudy.com/files/aa/VvaY1tly1pFxqrDgWXB38lIpPbGx4CZZ89Xrq.m3u8
+                    http://proxy-back.onrender.com/proxy?url=https://share84822.sharecloudy.com/files/aa/hJwTYdaAZepYFdfm5m60YNtyT61w15LiOhc3.ts
                 </div>
             </div>
 
@@ -196,15 +193,14 @@ def index():
                 <h2>💻 Intégration HTML/JavaScript</h2>
                 <div class="code-box">
 &lt;video controls&gt;
-    &lt;source src="http://127.0.0.1:5000/proxy?url=VOTRE_URL" type="application/x-mpegURL"&gt;
+    &lt;source src="http://proxy-back.onrender.com/proxy?url=VOTRE_URL" type="application/x-mpegURL"&gt;
 &lt;/video&gt;
                 </div>
             </div>
         </div>
     </body>
     </html>
-    """, mimetype='text/html')
-    return add_cors_headers(response)
+    """
 
 @app.route('/proxy')
 def proxy():
@@ -213,12 +209,11 @@ def proxy():
     target_url = request.args.get('url')
     
     if not target_url:
-        response = Response(
+        return Response(
             '{"error": "Paramètre URL manquant. Utilisation: /proxy?url=VOTRE_URL"}',
             status=400,
             mimetype='application/json'
         )
-        return add_cors_headers(response)
     
     # Décoder l'URL si elle est encodée
     target_url = unquote(target_url)
@@ -279,19 +274,18 @@ def proxy():
             logger.info(f"Modified M3U8 content with proxy URLs")
             
             # Retourner le contenu modifié
-            flask_response = Response(
+            return Response(
                 modified_content,
                 status=response.status_code,
                 mimetype='application/vnd.apple.mpegurl'
             )
-            return add_cors_headers(flask_response)
         else:
             # Pour les autres fichiers (segments TS, etc.), streamer directement
             excluded_headers = [
                 'content-encoding', 
                 'content-length', 
                 'transfer-encoding', 
-                'connection',
+                'connection'
             ]
             
             response_headers = [
@@ -299,41 +293,37 @@ def proxy():
                 if name.lower() not in excluded_headers
             ]
             
-            flask_response = Response(
+            return Response(
                 stream_with_context(response.iter_content(chunk_size=8192)),
                 status=response.status_code,
                 headers=response_headers
             )
-            return add_cors_headers(flask_response)
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error proxying request: {str(e)}")
-        response = Response(
+        return Response(
             f'{{"error": "Erreur lors de la requête: {str(e)}"}}',
             status=500,
             mimetype='application/json'
         )
-        return add_cors_headers(response)
 
 @app.route('/health')
 def health():
     """Endpoint de santé"""
-    response = Response('{"status": "ok", "service": "M3U8 CORS Proxy"}', mimetype='application/json')
-    return add_cors_headers(response)
+    return {"status": "ok", "service": "M3U8 CORS Proxy"}
 
 @app.route('/proxy', methods=['OPTIONS'])
 def proxy_options():
     """Répondre aux requêtes OPTIONS (preflight)"""
-    response = Response()
-    return add_cors_headers(response)
+    return Response(status=204)
 
 if __name__ == '__main__':
     print("=" * 60)
     print("🚀 M3U8 CORS Proxy Server")
     print("=" * 60)
-    print("📍 Server: http://127.0.0.1:5000")
-    print("📖 Documentation: http://127.0.0.1:5000")
-    print("🔗 Usage: http://127.0.0.1:5000/proxy?url=YOUR_M3U8_URL")
+    print("📍 Server: http://0.0.0.0:5000")
+    print("📖 Documentation: http://localhost:5000")
+    print("🔗 Usage: http://localhost:5000/proxy?url=YOUR_M3U8_URL")
     print("=" * 60)
     print("✨ Features:")
     print("   - Automatic M3U8 URL rewriting")
