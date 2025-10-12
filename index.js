@@ -546,87 +546,85 @@ app.get('/proxy', async (req, res) => {
       });
     }
 
-    // ========== SEGMENTS TS ==========
-    if (isTS) {
-      // Tracking popularité
-      const count = stats.topContent.get(url) || 0;
-      stats.topContent.set(url, count + 1);
-
-      // Cache Redis
-      const cached = await redisGet(`segment_${url}`);
-      if (cached) {
-        stats.cache.hits++;
-        stats.cache.redis++;
-        
-        const buffer = Buffer.from(cached, 'base64');
-        
-        res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('X-Cache', 'HIT-REDIS');
-        res.setHeader('CDN-Cache-Control', 'public, max-age=31536000');
-        res.setHeader('Cloudflare-CDN-Cache-Control', 'public, max-age=31536000');
-        res.setHeader('Vary', 'Accept-Encoding');
-        
-        stats.streaming.activeStreams--;
-        return res.send(buffer);
-      }
-
-      stats.cache.misses++;
-
-      // Fetch depuis source
-      const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': new URL(url).origin,
-        'Origin': new URL(url).origin,
-        'Connection': 'keep-alive',
-        'Accept': '*/*'
-      };
-
-      if (req.headers.range) {
-        headers['Range'] = req.headers.range;
-      }
-
-    const response = await fetchWithRetry(url, {
-        method: 'GET',
-        responseType: 'arraybuffer',
-        headers,
-        timeout: 30000,
-        maxRedirects: 5
-    });
-
-      // Headers CDN-ready
+// ========== SEGMENTS TS ==========
+  if (isTS) {
+    // ✅ Tracking popularité SUPPRIMÉ (on ne track que les M3U8)
+    
+    // Cache Redis
+    const cached = await redisGet(`segment_${url}`);
+    if (cached) {
+      stats.cache.hits++;
+      stats.cache.redis++;
+      
+      const buffer = Buffer.from(cached, 'base64');
+      
       res.setHeader('Content-Type', 'video/mp2t');
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('X-Cache', 'MISS');
+      res.setHeader('X-Cache', 'HIT-REDIS');
       res.setHeader('CDN-Cache-Control', 'public, max-age=31536000');
       res.setHeader('Cloudflare-CDN-Cache-Control', 'public, max-age=31536000');
-      res.setHeader('ETag', crypto.createHash('md5').update(url).digest('hex'));
       res.setHeader('Vary', 'Accept-Encoding');
       
-      if (response.headers['content-length']) {
-        res.setHeader('Content-Length', response.headers['content-length']);
-      }
-      
-      if (response.headers['content-range']) {
-        res.setHeader('Content-Range', response.headers['content-range']);
-      }
-
-      // Cache sur Redis (24h) si réponse complète
-      if (!req.headers.range && response.data.byteLength > 0) {
-        await redisSet(
-          `segment_${url}`,
-          Buffer.from(response.data).toString('base64'),
-          86400
-        );
-      }
-
       stats.streaming.activeStreams--;
-      return res.status(response.status).send(response.data);
+      return res.send(buffer);
     }
+
+    stats.cache.misses++;
+
+    // Fetch depuis source
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': new URL(url).origin,
+      'Origin': new URL(url).origin,
+      'Connection': 'keep-alive',
+      'Accept': '*/*'
+    };
+
+    if (req.headers.range) {
+      headers['Range'] = req.headers.range;
+    }
+
+    const response = await fetchWithRetry(url, {
+      method: 'GET',
+      responseType: 'arraybuffer',
+      headers,
+      timeout: 30000,
+      maxRedirects: 5
+    });
+
+    // Headers CDN-ready
+    res.setHeader('Content-Type', 'video/mp2t');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('CDN-Cache-Control', 'public, max-age=31536000');
+    res.setHeader('Cloudflare-CDN-Cache-Control', 'public, max-age=31536000');
+    res.setHeader('ETag', crypto.createHash('md5').update(url).digest('hex'));
+    res.setHeader('Vary', 'Accept-Encoding');
+    
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    if (response.headers['content-range']) {
+      res.setHeader('Content-Range', response.headers['content-range']);
+    }
+
+    // Cache sur Redis (24h) si réponse complète
+    if (!req.headers.range && response.data.byteLength > 0) {
+      await redisSet(
+        `segment_${url}`,
+        Buffer.from(response.data).toString('base64'),
+        86400
+      );
+    }
+
+    stats.streaming.activeStreams--;
+    return res.status(response.status).send(response.data);
+  }
 
     // ========== FICHIERS M3U8 ==========
     if (isM3U8) {
@@ -794,14 +792,25 @@ app.get('/stats', (req, res) => {
   const topContent = Array.from(stats.topContent.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([url, count]) => ({
-      url: url.substring(url.lastIndexOf('/') + 1),
-      views: count
-    }));
-
-  const avgSpeed = stats.streaming.totalBytesServed > 0
-    ? (stats.streaming.totalBytesServed * 8 / 1000000 / (process.uptime() / 60)).toFixed(2)
-    : 0;
+    .map(([url, count]) => {
+      // ✅ Extraire le nom de fichier M3U8
+      const filename = url.substring(url.lastIndexOf('/') + 1);
+      
+      // ✅ Extraire le domaine
+      let domain = '';
+      try {
+        domain = new URL(url).hostname;
+      } catch (e) {
+        domain = 'unknown';
+      }
+      
+      return {
+        filename: filename,           // "video.m3u8"
+        domain: domain,                // "cdn.example.com"
+        fullUrl: url,                  // URL complète (pour debug)
+        views: count
+      };
+    });
 
   res.json({
     requests: stats.requests,
@@ -1004,13 +1013,23 @@ app.get('/dashboard', (req, res) => {
           </div>
 
           <div class="card">
-            <h2>🔥 Top Contenus</h2>
-            \${stats.topContent.map((item, i) => \`
-              <div class="stat">
-                <span class="stat-label">\${i + 1}. \${item.url.substring(0, 30)}...</span>
-                <span class="stat-value">\${item.views} vues</span>
-              </div>
-            \`).join('') || '<div class="stat"><span class="stat-label">Aucun contenu encore</span></div>'}
+            <h2>🔥 Top M3U8</h2>
+            ${stats.topContent.map((item, i) => {
+              // Extraire domaine et fichier
+              let displayText = item.filename || 'N/A';
+              if (item.domain) {
+                displayText = `${item.domain}/${item.filename}`;
+              }
+              
+              return `
+                <div class="stat">
+                  <span class="stat-label" title="${item.fullUrl || item.filename}">
+                    ${i + 1}. ${displayText.substring(0, 50)}${displayText.length > 50 ? '...' : ''}
+                  </span>
+                  <span class="stat-value">${item.views} vues</span>
+                </div>
+              `;
+            }).join('') || '<div class="stat"><span class="stat-label">Aucune vidéo M3U8 encore</span></div>'}
           </div>
         \`;
 
