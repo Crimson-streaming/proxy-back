@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plyr + HLS — Extraction iframe et lecture m3u8</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      color: #e6eef8; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      min-height: 100vh; 
+      margin: 0; 
+      padding: 20px;
+    }
+    .container { 
+      width: min(1100px, 100%); 
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+    h1 { 
+      font-size: 1.5rem; 
+      margin: 0 0 1.5rem; 
+      text-align: center;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .input-section {
+      margin-bottom: 1.5rem;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+    }
+    
+    .input-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    
+    input {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      background: rgba(30, 41, 59, 0.8);
+      border: 2px solid rgba(96, 165, 250, 0.3);
+      border-radius: 8px;
+      color: #e6eef8;
+      font-size: 0.9rem;
+      transition: all 0.3s;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+    }
+    
+    input::placeholder {
+      color: #64748b;
+    }
+    
+    button {
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .quick-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+    
+    .quick-link {
+      padding: 0.4rem 0.8rem;
+      background: rgba(96, 165, 250, 0.15);
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      border-radius: 6px;
+      color: #60a5fa;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .quick-link:hover {
+      background: rgba(96, 165, 250, 0.25);
+      transform: translateY(-1px);
+    }
+    
+    .video-wrapper {
+      position: relative;
+      display: none;
+      margin-bottom: 1rem;
+    }
+    
+    .video-wrapper.active {
+      display: block;
+    }
+    
+    .plyr__video-embed, video { 
+      border-radius: 12px; 
+      box-shadow: 0 10px 40px rgba(2, 6, 23, 0.6); 
+      width: 100%;
+    }
+    
+    .status {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .status.show {
+      display: block;
+    }
+    
+    .status.loading {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #60a5fa;
+    }
+    
+    .status.success {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+    }
+    
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+    
+    .info { 
+      font-size: 0.85rem; 
+      text-align: center; 
+      margin-top: 1rem; 
+      color: #94a3b8; 
+    }
+    
+    code { 
+      background: rgba(15, 23, 42, 0.8); 
+      padding: 2px 8px; 
+      border-radius: 4px; 
+      color: #60a5fa;
+      font-size: 0.85em;
+    }
+    
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(96, 165, 250, 0.3);
+      border-top-color: #60a5fa;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    @media (max-width: 768px) {
+      .container { padding: 1.5rem; }
+      .input-group { flex-direction: column; }
+      button { width: 100%; }
+      h1 { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Lecteur Vidéo avec Extraction Iframe</h1>
+
+    <div class="input-section">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="iframeUrl" 
+          placeholder="URL de l'iframe (ex: https://sharecloudy.com/iframe/aPgZqyX0gq)"
+          value="https://sharecloudy.com/iframe/aPgZqyX0gq"
+        />
+        <button id="loadBtn" onclick="loadFromIframe()">
+          🚀 Charger
+        </button>
+      </div>
+      
+      <div class="quick-links">
+        <span style="color: #94a3b8; margin-right: 0.5rem;">Exemples:</span>
+        <span class="quick-link" onclick="setUrl('https://sharecloudy.com/iframe/aPgZqyX0gq')">
+          ShareCloudy
+        </span>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div id="videoWrapper" class="video-wrapper">
+      <video id="player" controls playsinline></video>
+    </div>
+
+    <p class="info">
+      Serveur proxy: <code>http://localhost:5000</code>
+      <br>
+      <small>Extraction automatique M3U8 + Proxification CORS</small>
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.0/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js"></script>
+
+  <script>
+    let player = null;
+    let hls = null;
+  const proxyBase = 'http://localhost:5000';
+
+    function setUrl(url) {
+      document.getElementById('iframeUrl').value = url;
+    }
+
+    function showStatus(message, type) {
+      const status = document.getElementById('status');
+      status.className = `status ${type} show`;
+      status.innerHTML = message;
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          status.classList.remove('show');
+        }, 3000);
+      }
+    }
+
+    async function loadFromIframe() {
+      const iframeUrl = document.getElementById('iframeUrl').value.trim();
+      const loadBtn = document.getElementById('loadBtn');
+      const videoWrapper = document.getElementById('videoWrapper');
+      
+      if (!iframeUrl) {
+        showStatus('❌ Veuillez entrer une URL d\'iframe', 'error');
+        return;
+      }
+
+      try {
+        // Désactiver le bouton et afficher le chargement
+        loadBtn.disabled = true;
+        loadBtn.textContent = '⏳ Chargement...';
+        showStatus('<span class="spinner"></span>Extraction de l\'URL M3U8 depuis l\'iframe...', 'loading');
+
+        // Appeler l'API iframe du proxy
+        const response = await fetch(`${proxyBase}/iframe?url=${encodeURIComponent(iframeUrl)}`);
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Erreur lors de l\'extraction');
+        }
+
+        const data = await response.json();
+        
+        if (!data.url) {
+          throw new Error('Format de réponse invalide');
+        }
+
+        const m3u8ProxyUrl = data.url;
+
+        console.log('[SUCCESS] URL M3U8 proxifiée récupérée:', m3u8ProxyUrl);
+
+        showStatus(`✅ URL M3U8 extraite avec succès!<br><small style="opacity:0.7">Chargement de la vidéo...</small>`, 'success');
+
+        // Charger la vidéo
+        await loadVideo(m3u8ProxyUrl);
+        
+        // Afficher le lecteur
+        videoWrapper.classList.add('active');
+        
+        // Réactiver le bouton
+        loadBtn.disabled = false;
+        loadBtn.textContent = '🚀 Charger';
+
+      } catch (error) {
+        console.error('[ERROR]', error);
+        showStatus(`❌ ${error.message}`, 'error');
+        loadBtn.disabled = false;
+        loadBtn.textContent = '🚀 Charger';
+      }
+    }
+
+    async function loadVideo(m3u8Url) {
+      const video = document.getElementById('player');
+
+      // Nettoyer l'ancienne instance
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      if (player) {
+        player.destroy();
+        player = null;
+      }
+
+      // Patcher XMLHttpRequest pour proxifier les segments .ts
+      if (!XMLHttpRequest.prototype._originalOpen) {
+        XMLHttpRequest.prototype._originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+          let finalUrl = url;
+
+          // Si c'est un .ts, le proxifier avec le bon serveur
+          if (url && url.includes('.ts') && !url.includes('/proxy')) {
+            finalUrl = `${proxyBase}/proxy?url=${encodeURIComponent(url)}`;
+            console.log('[PROXY-TS]', url.substring(url.lastIndexOf('/') + 1));
+          }
+
+          return this._originalOpen.call(this, method, finalUrl, ...rest);
+        };
+      }
+
+      if (Hls.isSupported()) {
+        hls = new Hls({ 
+          enableWorker: true,
+          debug: false
+        });
+
+        hls.loadSource(m3u8Url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+          console.log('[HLS] ✓ Manifest chargé avec succès');
+          video.play().catch(e => console.log('[PLAY] Autoplay bloqué:', e.message));
+        });
+
+        hls.on(Hls.Events.ERROR, function(event, data) {
+          if (data.fatal) {
+            console.error('[HLS ERROR]', data);
+            showStatus(`❌ Erreur HLS: ${data.type} - ${data.details}`, 'error');
+            
+            switch(data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('[HLS] Tentative de récupération...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('[HLS] Tentative de récupération média...');
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                break;
+            }
+          }
+        });
+
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = m3u8Url;
+        video.play().catch(e => console.log('[PLAY] Autoplay bloqué:', e.message));
+      } else {
+        throw new Error('Votre navigateur ne supporte pas HLS');
+      }
+
+      // Initialiser Plyr
+      player = new Plyr(video, {
+        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'],
+        settings: ['quality', 'speed', 'loop'],
+        i18n: {
+          restart: 'Recommencer',
+          rewind: 'Reculer {seektime}s',
+          play: 'Lecture',
+          pause: 'Pause',
+          fastForward: 'Avancer {seektime}s',
+          seek: 'Rechercher',
+          seekLabel: '{currentTime} sur {duration}',
+          played: 'Lu',
+          buffered: 'Mis en mémoire tampon',
+          currentTime: 'Temps actuel',
+          duration: 'Durée',
+          volume: 'Volume',
+          mute: 'Muet',
+          unmute: 'Activer le son',
+          enableCaptions: 'Activer les sous-titres',
+          disableCaptions: 'Désactiver les sous-titres',
+          enterFullscreen: 'Plein écran',
+          exitFullscreen: 'Quitter le plein écran',
+          settings: 'Paramètres',
+          speed: 'Vitesse',
+          normal: 'Normale',
+          quality: 'Qualité'
+        }
+      });
+
+      console.log('[READY] ✓ Lecteur initialisé');
+    }
+
+    // Permettre de charger avec la touche Entrée
+    document.getElementById('iframeUrl').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        loadFromIframe();
+      }
+    });
+
+    console.log('[INFO] Prêt à extraire et lire des vidéos M3U8');
+  </script>
+</body>
+</html>
