@@ -94,6 +94,7 @@ async function redisDel(keys) {
 // ============================================================================
 // CONNECTION POOLING (Réutilisation des connexions)
 // ============================================================================
+/*
 const httpAgent = new http.Agent({
   keepAlive: true,
   maxSockets: 50,
@@ -114,6 +115,7 @@ const axiosInstance = axios.create({
   timeout: 30000,
   maxRedirects: 5
 });
+*/
 
 // ============================================================================
 // STATISTIQUES AVANCÉES
@@ -266,7 +268,8 @@ function verifyStreamToken(url, token) {
 async function fetchWithRetry(url, config, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await axiosInstance(url, config);
+      return await axios(url, config);
+        // ← CHANGEMENT ICI
     } catch (error) {
       stats.errors.total++;
       
@@ -321,11 +324,17 @@ async function fetchAndCacheSegment(url) {
     if (cached) return;
 
     const response = await fetchWithRetry(url, {
-      method: 'GET',
-      responseType: 'arraybuffer',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
+    method: 'GET',
+    responseType: 'arraybuffer',
+    headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://sharecloudy.com/',
+        'Origin': 'https://sharecloudy.com',
+        'Connection': 'keep-alive',
+        'Accept': '*/*'
+    },
+    timeout: 30000,
+    maxRedirects: 5
     });
 
     // Cache 24h sur Redis
@@ -370,12 +379,14 @@ app.get('/iframe', iframeLimiter, async (req, res) => {
     stats.cache.misses++;
 
     const response = await fetchWithRetry(url, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': new URL(url).origin,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      }
+        method: 'GET',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': new URL(url).origin,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        timeout: 10000,
+        maxRedirects: 5
     });
 
     const html = response.data;
@@ -524,18 +535,22 @@ app.get('/proxy', async (req, res) => {
       const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': new URL(url).origin,
-        'Origin': new URL(url).origin
+        'Origin': new URL(url).origin,
+        'Connection': 'keep-alive',
+        'Accept': '*/*'
       };
 
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
       }
 
-      const response = await fetchWithRetry(url, {
+    const response = await fetchWithRetry(url, {
         method: 'GET',
         responseType: 'arraybuffer',
-        headers
-      });
+        headers,
+        timeout: 30000,
+        maxRedirects: 5
+    });
 
       // Headers CDN-ready
       res.setHeader('Content-Type', 'video/mp2t');
@@ -594,10 +609,15 @@ app.get('/proxy', async (req, res) => {
         method: 'GET',
         responseType: 'text',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/vnd.apple.mpegurl,*/*'
-        }
-      });
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': new URL(url).origin,
+            'Origin': new URL(url).origin,
+            'Accept': 'application/vnd.apple.mpegurl,*/*',
+            'Connection': 'keep-alive'
+        },
+        timeout: 15000,
+        maxRedirects: 5
+    });
 
       let content = response.data;
       const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
