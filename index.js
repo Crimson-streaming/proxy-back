@@ -628,6 +628,10 @@ app.get('/proxy', async (req, res) => {
 
     // ========== FICHIERS M3U8 ==========
     if (isM3U8) {
+
+      const count = stats.topContent.get(url) || 0;
+      stats.topContent.set(url, count + 1);
+
       // Cache Redis (30 secondes)
       const cacheKey = `m3u8_${url}`;
       const cachedM3u8 = await redisGet(cacheKey);
@@ -789,14 +793,18 @@ app.get('/stats', (req, res) => {
     ? ((stats.cache.hits / (stats.cache.hits + stats.cache.misses)) * 100).toFixed(2)
     : '0';
 
+  // ✅ Calculer vitesse moyenne (AJOUTÉ)
+  const avgSpeed = stats.streaming.totalBytesServed > 0 && process.uptime() > 0
+    ? (stats.streaming.totalBytesServed * 8 / 1000000 / (process.uptime() / 60)).toFixed(2)
+    : 0;
+
+  // ✅ Convertir Map → Array (CORRIGÉ)
   const topContent = Array.from(stats.topContent.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([url, count]) => {
-      // ✅ Extraire le nom de fichier M3U8
       const filename = url.substring(url.lastIndexOf('/') + 1);
       
-      // ✅ Extraire le domaine
       let domain = '';
       try {
         domain = new URL(url).hostname;
@@ -805,9 +813,9 @@ app.get('/stats', (req, res) => {
       }
       
       return {
-        filename: filename,           // "video.m3u8"
-        domain: domain,                // "cdn.example.com"
-        fullUrl: url,                  // URL complète (pour debug)
+        filename,
+        domain,
+        fullUrl: url,
         views: count
       };
     });
@@ -820,15 +828,16 @@ app.get('/stats', (req, res) => {
     },
     errors: stats.errors,
     streaming: {
-      ...stats.streaming,
-      avgSpeed: `${avgSpeed} Mbps`,
+      activeStreams: stats.streaming.activeStreams,
+      totalBytesServed: stats.streaming.totalBytesServed,
+      bufferingEvents: stats.streaming.bufferingEvents,
+      avgSpeed: `${avgSpeed} Mbps`,  // ✅ CORRIGÉ
       totalGB: (stats.streaming.totalBytesServed / 1024 / 1024 / 1024).toFixed(2)
     },
     topContent,
     hourlyDistribution: stats.hourlyStats
   });
 });
-
 // ============================================================================
 // ROUTE: ANALYTICS DASHBOARD (HTML)
 // ============================================================================
@@ -1014,7 +1023,8 @@ app.get('/dashboard', (req, res) => {
 
           <div class="card">
             <h2>🔥 Top M3U8</h2>
-            ${stats.topContent.map((item, i) => {
+            ${stats.topContent && stats.topContent.length > 0 
+              ? stats.topContent.map((item, i) => {
               // Extraire domaine et fichier
               let displayText = item.filename || 'N/A';
               if (item.domain) {
@@ -1029,7 +1039,9 @@ app.get('/dashboard', (req, res) => {
                   <span class="stat-value">${item.views} vues</span>
                 </div>
               `;
-            }).join('') || '<div class="stat"><span class="stat-label">Aucune vidéo M3U8 encore</span></div>'}
+                }).join('')
+                : '<div class="stat"><span class="stat-label">Aucune vidéo M3U8 encore</span></div>'
+              }
           </div>
         \`;
 
