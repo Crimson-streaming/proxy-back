@@ -248,7 +248,7 @@ app.get('/proxy', async (req, res) => {
           const absoluteUrl = match.startsWith('http') 
             ? match 
             : baseUrl + match.trim();
-          return `http://localhost:${PORT}/proxy?url=${encodeURIComponent(absoluteUrl)}`;
+          return `${PROXY_URL}?url=${encodeURIComponent(absoluteUrl)}`;
         }
       );
 
