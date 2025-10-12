@@ -8,6 +8,9 @@ const NodeCache = require('node-cache');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// URL du proxy à utiliser pour les réponses (modifiable via variable d'environnement)
+const PROXY_URL = process.env.PROXY_URL || 'https://proxy-cloudy.onrender.com/proxy';
+
 // Configuration du cache (TTL de 5 minutes)
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
@@ -63,10 +66,10 @@ app.get('/iframe', async (req, res) => {
 
     // Vérifier le cache
     const cacheKey = `iframe_${url}`;
-    const cachedData = cache.get(cacheKey);
-    if (cachedData) {
+    const cachedUrl = cache.get(cacheKey);
+    if (cachedUrl) {
       console.log('✓ Données récupérées du cache');
-      return res.json(cachedData);
+      return res.json({ url: cachedUrl });
     }
 
     console.log(`→ Récupération de l'iframe: ${url}`);
@@ -143,25 +146,16 @@ app.get('/iframe', async (req, res) => {
 
     console.log(`✓ URL M3U8 trouvée: ${m3u8Url}`);
 
-    // Construire la réponse dans le format demandé
-    const proxyUrl = `http://localhost:${PORT}/proxy?url=${encodeURIComponent(m3u8Url)}`;
-    
-    const responseData = {
-      playlist: [{
-        image: "https://static.vecteezy.com/ti/photos-gratuite/p2/2008069-fond-de-ciel-etoile-3d-gratuit-photo.jpg",
-        sources: [{
-          file: proxyUrl,
-          label: "HD",
-          default: true
-        }],
-        originalUrl: m3u8Url
-      }]
-    };
+    // Construire l'URL avec le proxy
+    const proxifiedUrl = `${PROXY_URL}?url=${encodeURIComponent(m3u8Url)}`;
 
     // Mettre en cache
-    cache.set(cacheKey, responseData);
+    cache.set(cacheKey, proxifiedUrl);
 
-    res.json(responseData);
+    // Renvoyer l'URL proxifiée
+    res.json({
+      url: proxifiedUrl
+    });
 
   } catch (error) {
     console.error('✗ Erreur:', error.message);
@@ -325,6 +319,7 @@ app.listen(PORT, () => {
   console.log('\n🚀 Serveur proxy démarré!');
   console.log(`📡 Port: ${PORT}`);
   console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🔗 Proxy URL: ${PROXY_URL}`);
   console.log('\n📋 Routes disponibles:');
   console.log(`   - GET /              → Informations du serveur`);
   console.log(`   - GET /iframe?url=   → Extraction M3U8 depuis iframe`);
