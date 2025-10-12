@@ -278,12 +278,38 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
+// Route health check
+app.get('/health', (req, res) => {
+  const uptime = process.uptime();
+  const memoryUsage = process.memoryUsage();
+  
+  res.json({
+    status: 'healthy',
+    uptime: Math.floor(uptime),
+    uptimeFormatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
+    timestamp: new Date().toISOString(),
+    memory: {
+      used: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      total: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`
+    },
+    cache: {
+      keys: cache.keys().length,
+      stats: cache.getStats()
+    }
+  });
+});
+
 // Route pour vérifier que le serveur fonctionne
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
     version: '1.0.0',
     endpoints: {
+      health: {
+        url: '/health',
+        description: 'Vérifier l\'état du serveur',
+        example: '/health'
+      },
       iframe: {
         url: '/iframe?url=<URL_IFRAME>',
         description: 'Extrait l\'URL M3U8 depuis une iframe',
@@ -301,7 +327,8 @@ app.get('/', (req, res) => {
       'Cache (5 minutes)',
       'Support HLS/M3U8',
       'Streaming des segments TS',
-      'Gestion des erreurs'
+      'Gestion des erreurs',
+      'Health check'
     ]
   });
 });
@@ -310,7 +337,7 @@ app.get('/', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     error: 'Route non trouvée',
-    availableRoutes: ['/', '/iframe', '/proxy']
+    availableRoutes: ['/', '/health', '/iframe', '/proxy']
   });
 });
 
@@ -322,6 +349,7 @@ app.listen(PORT, () => {
   console.log(`🔗 Proxy URL: ${PROXY_URL}`);
   console.log('\n📋 Routes disponibles:');
   console.log(`   - GET /              → Informations du serveur`);
+  console.log(`   - GET /health        → État de santé du serveur`);
   console.log(`   - GET /iframe?url=   → Extraction M3U8 depuis iframe`);
   console.log(`   - GET /proxy?url=    → Proxy pour M3U8 et segments\n`);
 });
