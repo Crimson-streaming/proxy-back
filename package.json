@@ -1,0 +1,30 @@
+{
+  "name": "cors-proxy-m3u8",
+  "version": "1.0.0",
+  "description": "Proxy professionnel pour contourner CORS et extraire URLs M3U8",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "proxy",
+    "cors",
+    "m3u8",
+    "hls",
+    "streaming"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "node-cache": "^5.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
