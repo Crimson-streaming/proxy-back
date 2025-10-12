@@ -751,8 +751,8 @@ app.get('/health', async (req, res) => {
     },
     stats: stats,
     activeConnections: {
-      http: httpAgent.getCurrentConnections?.() || 'N/A',
-      https: httpsAgent.getCurrentConnections?.() || 'N/A'
+      http: 'N/A',
+      https: 'N/A'
     }
   });
 });
