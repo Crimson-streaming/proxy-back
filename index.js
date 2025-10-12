@@ -198,7 +198,21 @@ app.use((req, res, next) => {
   const start = Date.now();
   const ip = req.ip || req.connection.remoteAddress;
   
-  res.on('finish', () => {
+  // Intercepter la méthode send/end pour calculer avant l'envoi
+  const originalSend = res.send;
+  const originalEnd = res.end;
+  
+  res.send = function(data) {
+    calculateAndSetHeaders(data);
+    return originalSend.call(this, data);
+  };
+  
+  res.end = function(data) {
+    calculateAndSetHeaders(data);
+    return originalEnd.call(this, data);
+  };
+  
+  function calculateAndSetHeaders(data) {
     const duration = Date.now() - start;
     const hour = new Date().getHours();
     stats.hourlyStats[hour]++;
@@ -208,19 +222,31 @@ app.use((req, res, next) => {
       console.log(`[${new Date().toISOString()}] ${ip} ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
     }
     
-    // Tracking vitesse streaming
+    // Tracking vitesse streaming (avant l'envoi)
     if (req.query.url && req.query.url.includes('.ts')) {
-      const bytes = parseInt(res.getHeader('Content-Length') || 0);
-      if (bytes > 0) {
+      const bytes = data ? Buffer.byteLength(data) : parseInt(res.getHeader('Content-Length') || 0);
+      
+      if (bytes > 0 && duration > 0) {
         stats.streaming.totalBytesServed += bytes;
         const speedMbps = (bytes * 8 / duration / 1000).toFixed(2);
-        res.setHeader('X-Stream-Speed', `${speedMbps} Mbps`);
         
-        // Détection buffering (si trop lent)
+        // ✅ Définir le header AVANT l'envoi
+        if (!res.headersSent) {
+          res.setHeader('X-Stream-Speed', `${speedMbps} Mbps`);
+        }
+        
+        // Détection buffering
         if (speedMbps < 2) {
           stats.streaming.bufferingEvents++;
         }
       }
+    }
+  }
+  
+  res.on('finish', () => {
+    // Nettoyage si nécessaire (mais pas de setHeader ici)
+    if (req.query.url && req.query.url.includes('.ts')) {
+      stats.streaming.activeStreams = Math.max(0, stats.streaming.activeStreams - 1);
     }
   });
   
