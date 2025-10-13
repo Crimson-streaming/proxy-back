@@ -848,7 +848,7 @@ app.get('/dashboard', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VOD Proxy Dashboard</title>
+  <title>Cloudy Proxy Dashboard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
@@ -902,7 +902,7 @@ app.get('/dashboard', (req, res) => {
 </head>
 <body>
   <div class="container">
-    <h1>📊 VOD Proxy Dashboard</h1>
+    <h1>📊 Cloudy Proxy Dashboard</h1>
     <div class="grid" id="dashboard"></div>
     <div class="refresh">🔄 Actualisation automatique toutes les 5 secondes</div>
   </div>
@@ -1152,7 +1152,7 @@ app.post('/clear-cache', async (req, res) => {
 // ============================================================================
 app.get('/', (req, res) => {
   res.json({
-    name: 'VOD Streaming Proxy',
+    name: 'cloudyProxy',
     version: '3.0.0',
     status: 'production-ready',
     endpoints: {
@@ -1261,7 +1261,7 @@ app.use((req, res) => {
 // ============================================================================
 app.listen(PORT, () => {
   console.log('\n' + '='.repeat(70));
-  console.log('🚀 VOD STREAMING PROXY v3.0 - PRODUCTION READY');
+  console.log('🚀CLOUDY PROXY v3.0 - PRODUCTION READY');
   console.log('='.repeat(70));
   console.log(`\n📡 Serveur démarré sur le port ${PORT}`);
   console.log(`🌐 URL locale: http://localhost:${PORT}`);
